@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 from docx_parser import parse_docx
+from pdf_parser import parse_pdf
 from pdf_generator import generar_tabla_optimizada, generar_setup_fiv
 import pandas as pd
 from datetime import datetime, timedelta
@@ -75,11 +76,24 @@ else:
 # --- INTERFAZ DE USUARIO ---
 st.title("Procesamiento de Tabla Operatoria y Setup Lab")
 
-archivo_subido = st.file_uploader("Sube la Tabla Operatoria (DOCX)", type=["docx"])
+archivo_subido = st.file_uploader("Sube la Tabla Operatoria (DOCX, PDF o DOC)", type=["docx", "pdf", "doc"])
 
 if archivo_subido:
+    # Determinar tipo de archivo
+    nombre_archivo = archivo_subido.name.lower()
+    
+    if nombre_archivo.endswith('.doc') and not nombre_archivo.endswith('.docx'):
+        st.error("⚠️ El formato .doc (Word antiguo) no es compatible directamente. "
+                 "Por favor convierte tu archivo a .docx o .pdf antes de subirlo.\n\n"
+                 "**¿Cómo convertir?** Abre el archivo en Word → Archivo → Guardar como → "
+                 "selecciona 'Documento de Word (.docx)' y guárdalo.")
+        st.stop()
+    
     # 1. EXTRACCIÓN DE DATOS
-    fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_docx(archivo_subido, archivo_subido.name)
+    if nombre_archivo.endswith('.pdf'):
+        fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_pdf(archivo_subido, archivo_subido.name)
+    else:
+        fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_docx(archivo_subido, archivo_subido.name)
         
     st.success(f"Documento detectado para la fecha: {fecha_str}")
     
