@@ -65,32 +65,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- PROTECCIÓN CON CONTRASEÑA ---
-def check_password():
-    """Verifica la contraseña antes de permitir acceso a la app."""
-    if 'authenticated' not in st.session_state:
-        st.session_state['authenticated'] = False
-    
-    if st.session_state['authenticated']:
-        return True
-    
-    st.markdown("<h2 style='text-align: center; color: #1E3A8A;'>🔒 Acceso Restringido</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Ingresa la contraseña para acceder al sistema</p>", unsafe_allow_html=True)
-    
-    col_left, col_center, col_right = st.columns([1, 2, 1])
-    with col_center:
-        password = st.text_input("Contraseña", type="password", placeholder="Ingresa la contraseña")
-        if st.button("Ingresar", type="primary", use_container_width=True):
-            if password == st.secrets.get("app_password", "fiv26"):
-                st.session_state['authenticated'] = True
-                st.rerun()
-            else:
-                st.error("❌ Contraseña incorrecta")
-    return False
-
-if not check_password():
-    st.stop()
-
 if os.path.exists("logo.png"):
     # Se recomienda usar columnas para centrar o alinear bonito
     col_logo, _ = st.columns([1, 4])
@@ -162,12 +136,8 @@ if archivo_subido:
             with c2: emb = st.number_input(f"N° Embriones {i+1}", min_value=1)
             datos_dia5.append({"Paciente": nom, "PGD": "SI", "Embriones": emb})
 
-    # 4. VALIDACIÓN DE RESPONSABLE Y GENERACIÓN
-    if not responsable or not responsable.strip():
-        st.warning("⚠️ Debes ingresar el nombre del Responsable del Laboratorio antes de generar los documentos.")
-    
-    generar_disabled = not responsable or not responsable.strip()
-    if st.button("Generar Documentos Finales", type="primary", disabled=generar_disabled):
+    # 4. BOTÓN DE GENERACIÓN Y ESTADO DE SESIÓN
+    if st.button("Generar Documentos Finales", type="primary"):
         with st.spinner("Compilando y dibujando PDFs optimizados..."):
             buf_tabla = generar_tabla_optimizada(fecha_str, df_editado_p, df_editado_ui, df_editado_t)
             buf_setup = generar_setup_fiv(fecha_str, df_editado_p, df_editado_ui, df_editado_t, responsable, datos_dia5)
