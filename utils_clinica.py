@@ -48,10 +48,23 @@ def add_time(hora_str, minutos):
 
 import math
 
-def is_receptor(proc_str):
-    text = str(proc_str).upper()
-    keywords = ["OVO-R", "OVOR", "OVOS PROPIOS", "RECEPTORA"]
+def is_receptor(proc_str, diag_str=""):
+    """Detecta si la paciente es receptora de óvulos (OVO-R, OVO-R CRIO, etc.)
+    Revisa tanto el campo PROC como el campo de diagnóstico/observaciones."""
+    text = (str(proc_str) + " " + str(diag_str)).upper()
+    keywords = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA"]
     return any(k in text for k in keywords)
+
+def is_donor_vitri(proc_str, diag_str=""):
+    """Detecta si la paciente es donante o caso de vitrificación/preservación.
+    Estas pacientes NO deben llevar hora ICSI/FIV."""
+    text = (str(proc_str) + " " + str(diag_str)).upper()
+    donor_keywords = ["OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE",
+                      "DONANTE", "VITRIFIC", "PRESERV", "VITRI OVOS"]
+    # No marcar como donante si explícitamente es receptora
+    if is_receptor(proc_str, diag_str):
+        return False
+    return any(k in text for k in donor_keywords)
 
 def calc_placa_g_ivf(max_folic, is_recept):
     if is_recept:

@@ -1,5 +1,5 @@
 from fpdf import FPDF
-from utils_clinica import add_time, get_max_follicles, calculate_plates, is_receptor, calc_placa_g_ivf, calc_placa_icsi, calc_placa_embryoscope, calc_placa_cultivo_trad, calc_wp_ts
+from utils_clinica import add_time, get_max_follicles, calculate_plates, is_receptor, is_donor_vitri, calc_placa_g_ivf, calc_placa_icsi, calc_placa_embryoscope, calc_placa_cultivo_trad, calc_wp_ts
 import io
 import pandas as pd
 
@@ -12,8 +12,14 @@ class PDF_Robustecido(FPDF):
         self.add_page()
 
     def header(self):
-        self.set_font('Arial', 'B', 14)
-        self.cell(0, 10, f'{self.fecha_doc}', border=0, ln=1, align='C')
+        self.set_font('Helvetica', 'B', 14)
+        # Asegurar que la fecha siempre se renderice limpiando caracteres problemáticos
+        fecha_safe = str(self.fecha_doc)
+        try:
+            fecha_safe.encode('latin-1')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            fecha_safe = fecha_safe.encode('latin-1', errors='replace').decode('latin-1')
+        self.cell(0, 10, fecha_safe, border=0, new_x='LMARGIN', new_y='NEXT', align='C')
         self.ln(5)
 
 def sanitize_text(text):
@@ -66,7 +72,9 @@ def aplicar_sop_columnas_punciones(df):
         hora_str = str(row[col_hora]) if col_hora else ""
         semen_str = str(row[col_semen]) if col_semen else ""
         
-        is_recept = is_receptor(proc)
+        # Detección ampliada: revisar PROC + diagnóstico/observaciones
+        is_recept = is_receptor(proc, diag)
+        is_donor = is_donor_vitri(proc, diag)
         
         # Abreviar CULDOCENTESIS a CULDO a pedimento del usuario para ahorrar espacio
         if 'CULDOCENTESIS' in proc:
@@ -80,7 +88,7 @@ def aplicar_sop_columnas_punciones(df):
             if hora_str:
                 df_mod.at[idx, 'DECU OVO'] = add_time(hora_str, 110)
                 
-            vitri_keywords = ["VITRIFIC", "PRESERV", "OVO-D", "DONANTE", "OVODONANTE"]
+            vitri_keywords = ["VITRIFIC", "PRESERV", "OVO-D", "OVO D", "DONANTE", "OVODONANTE", "OVO DONANTE"]
             is_vitri = any(k in diag for k in vitri_keywords) or any(k in proc for k in vitri_keywords)
             
             if col_semen and hora_str and semen_str.strip() and semen_str != "--" and not is_vitri:
@@ -90,10 +98,15 @@ def aplicar_sop_columnas_punciones(df):
                 df_mod.at[idx, 'ICSI/FIV'] = f"{add_time(hora_str, 240)} - {add_time(hora_str, 360)}"
                 
         elif is_recept:
+            # Receptora (OVO-R, OVO-R CRIO, etc.): Semen 1h antes, ICSI/FIV rango 3-4h
             if col_semen and hora_str and semen_str.strip() and semen_str != "--":
                 df_mod.at[idx, col_semen] = f"{semen_str}\n({add_time(hora_str, -60)})"
             if hora_str:
-                df_mod.at[idx, 'ICSI/FIV'] = add_time(hora_str, 120)
+                df_mod.at[idx, 'ICSI/FIV'] = f"{add_time(hora_str, 180)} - {add_time(hora_str, 240)}"
+        
+        # Regla general: Donantes/Vitrificación NUNCA llevan ICSI/FIV
+        if is_donor:
+            df_mod.at[idx, 'ICSI/FIV'] = ""
 
     return df_mod
 
@@ -550,11 +563,15 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             if folic_str == 'nan': folic_str = ""
             
             # Columnas del Dataframe (dependiendo si es Punción o Ovos Desvitri)
-            es_receptor = is_receptor(row.get('PROC', ''))
-            semen = str(row.get('SEMEN', ''))
             diagnostico = str(row.get('MÉTODO/OBS', '')) # o DIAGNOSTICO en la otra tabla
             if 'DIAGNOSTICO' in row:
                 diagnostico += " " + str(row.get('DIAGNOSTICO', ''))
+            if 'OBSERVACIONES' in row:
+                diagnostico += " " + str(row.get('OBSERVACIONES', ''))
+            
+            # Detección ampliada: revisar PROC + diagnóstico para detectar OVO-R CRIO y variantes
+            es_receptor = is_receptor(row.get('PROC', ''), diagnostico)
+            semen = str(row.get('SEMEN', ''))
                 
             max_f = get_max_follicles(folic_str)
             
