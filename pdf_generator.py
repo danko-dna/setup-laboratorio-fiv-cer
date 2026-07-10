@@ -400,7 +400,7 @@ def generar_tabla_optimizada(fecha_str, df_punciones_orig, df_uso_interno_orig, 
 
     dibujar_tabla(pdf, df_transferencias, 'SALA TRANSFER')
 
-    pdf_output = pdf.output(dest='S').encode('latin1')
+    pdf_output = pdf.output()
     return io.BytesIO(pdf_output)
 
 def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias, responsable, datos_dia5):
@@ -700,5 +700,5 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         pdf.cell(65, 5, item, 1)
         pdf.cell(15, 5, "", 1, 1) # Checkbox box vacío
 
-    pdf_output = pdf.output(dest='S').encode('latin1')
+    pdf_output = pdf.output()
     return io.BytesIO(pdf_output)
