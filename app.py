@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from docx_parser import parse_docx
 from pdf_parser import parse_pdf
+from doc_parser import parse_doc
 from pdf_generator import generar_tabla_optimizada, generar_setup_fiv
 import pandas as pd
 from datetime import datetime, timedelta
@@ -83,14 +84,13 @@ if archivo_subido:
     nombre_archivo = archivo_subido.name.lower()
     
     if nombre_archivo.endswith('.doc') and not nombre_archivo.endswith('.docx'):
-        st.error("⚠️ El formato .doc (Word antiguo) no es compatible directamente. "
-                 "Por favor convierte tu archivo a .docx o .pdf antes de subirlo.\n\n"
-                 "**¿Cómo convertir?** Abre el archivo en Word → Archivo → Guardar como → "
-                 "selecciona 'Documento de Word (.docx)' y guárdalo.")
-        st.stop()
-    
-    # 1. EXTRACCIÓN DE DATOS
-    if nombre_archivo.endswith('.pdf'):
+        # Intentar parsear el .doc
+        st.warning("⚠️ El formato .doc (Word antiguo) tiene soporte limitado para extraer tablas. "
+                   "Si el resultado no es correcto, convierte el archivo a .docx o .pdf.\n\n"
+                   "**¿Cómo convertir?** Abre el archivo en Word → Archivo → Guardar como → "
+                   "selecciona 'Documento de Word (.docx)' y guárdalo.")
+        fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_doc(archivo_subido, archivo_subido.name)
+    elif nombre_archivo.endswith('.pdf'):
         fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_pdf(archivo_subido, archivo_subido.name)
     else:
         fecha_str, df_punciones, df_uso_interno, df_transferencias = parse_docx(archivo_subido, archivo_subido.name)

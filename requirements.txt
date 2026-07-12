@@ -3,3 +3,4 @@ pandas
 fpdf2
 python-docx
 pdfplumber
+olefile

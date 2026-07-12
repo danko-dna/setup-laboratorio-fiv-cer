@@ -19,7 +19,7 @@ class PDF_Robustecido(FPDF):
             fecha_safe.encode('latin-1')
         except (UnicodeEncodeError, UnicodeDecodeError):
             fecha_safe = fecha_safe.encode('latin-1', errors='replace').decode('latin-1')
-        self.cell(0, 10, fecha_safe, border=0, new_x='LMARGIN', new_y='NEXT', align='C')
+        self.cell(0, 10, fecha_safe, border=0, ln=1, align='C')
         self.ln(5)
 
 def sanitize_text(text):
