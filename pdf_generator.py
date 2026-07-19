@@ -611,13 +611,11 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
                               "PRESERVACIÓN FERTILIDAD", "VITRIFICACIÓN OVOCITOS", "VITRI OVOS", 
                               "VITRIFICACIÓN", "VITRIFICACIÓN OVO"]
             
-            # Palabras clave que indican explícitamente una receptora (éstas SÍ llevan Placa ICSI)
-            receptor_keywords = ["OVO-R", "OVOR", "OVORECEPTORA", "RECEPTORA"]
-            
             texto_busqueda = str(row.get('PROC', '')).upper() + " " + diagnostico.upper()
             
-            is_receptor_explicito = any(kw in texto_busqueda for kw in receptor_keywords)
-            is_vitri = any(kw in texto_busqueda for kw in vitri_keywords) and not is_receptor_explicito
+            # Usar is_receptor() centralizada (incluye OVO-R, DESV OVO, DESVITRI, etc.)
+            # Las receptoras SÍ llevan Placa ICSI, aunque el texto contenga "DONANTE #xxx"
+            is_vitri = any(kw in texto_busqueda for kw in vitri_keywords) and not es_receptor
             
             if is_vitri:
                 val_icsi = ""
