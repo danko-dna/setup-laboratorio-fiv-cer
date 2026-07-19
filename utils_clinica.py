@@ -49,11 +49,26 @@ def add_time(hora_str, minutos):
 import math
 
 def is_receptor(proc_str, diag_str=""):
-    """Detecta si la paciente es receptora de óvulos (OVO-R, OVO-R CRIO, etc.)
+    """Detecta si la paciente es receptora de óvulos o un caso de desvitrificación de ovocitos.
+    Ambos casos tienen el mismo SOP (ICSI/FIV, placas, WP/TS, etc.).
     Revisa tanto el campo PROC como el campo de diagnóstico/observaciones."""
     text = (str(proc_str) + " " + str(diag_str)).upper()
-    keywords = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA"]
-    return any(k in text for k in keywords)
+    
+    # 1. Keywords directas de receptora
+    receptor_keywords = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA"]
+    if any(k in text for k in receptor_keywords):
+        return True
+    
+    # 2. Desvitrificación/Descongelación de ovocitos (mismo SOP que receptora)
+    #    Detecta combinaciones como: DESV OVO, DESVITRI OVOS, DESCONGELACIÓN OVOCITOS, etc.
+    desv_prefixes = ["DESV", "DESCONGELAC", "DESVITRIFIC"]
+    ovo_keywords = ["OVO", "OVOCITO"]
+    has_desv = any(d in text for d in desv_prefixes)
+    has_ovo = any(o in text for o in ovo_keywords)
+    if has_desv and has_ovo:
+        return True
+    
+    return False
 
 def is_donor_vitri(proc_str, diag_str=""):
     """Detecta si la paciente es donante o caso de vitrificación/preservación.
