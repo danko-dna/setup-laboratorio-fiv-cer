@@ -40,14 +40,41 @@ def sanitize_dataframe(df):
     if df.empty: return df
     df_clean = df.copy()
     
+    # Deduplicar columnas vacías o duplicadas (evita error DataFrame vs Series)
+    cols = list(df_clean.columns)
+    seen = {}
+    new_cols = []
+    for c in cols:
+        c_str = str(c).strip()
+        if c_str == '' or c_str == 'nan':
+            c_str = '_vacio'
+        if c_str in seen:
+            seen[c_str] += 1
+            c_str = f"{c_str}_{seen[c_str]}"
+        else:
+            seen[c_str] = 0
+        new_cols.append(c_str)
+    df_clean.columns = new_cols
+    
+    # Eliminar columnas vacías
+    df_clean = df_clean[[c for c in df_clean.columns if not c.startswith('_vacio')]]
+    
+    # Eliminar filas completamente vacías
+    df_clean = df_clean.dropna(how='all').reset_index(drop=True)
+    # Eliminar filas donde todas las celdas son string vacío
+    df_clean = df_clean[~df_clean.apply(lambda row: all(str(v).strip() == '' or str(v).strip() == 'nan' for v in row), axis=1)].reset_index(drop=True)
+    
     # Sanitizar nombres de columnas
     new_columns = {col: sanitize_text(col) for col in df_clean.columns}
     df_clean.rename(columns=new_columns, inplace=True)
     
     # Sanitizar contenido
     for col in df_clean.columns:
-        if df_clean[col].dtype == object or str(df_clean[col].dtype) == 'string':
-            df_clean[col] = df_clean[col].apply(lambda x: sanitize_text(x) if pd.notnull(x) else x)
+        try:
+            if df_clean[col].dtype == object or str(df_clean[col].dtype) == 'string':
+                df_clean[col] = df_clean[col].apply(lambda x: sanitize_text(x) if pd.notnull(x) else x)
+        except Exception:
+            pass  # Saltar columnas problemáticas
     return df_clean
 
 def aplicar_sop_columnas_punciones(df):
