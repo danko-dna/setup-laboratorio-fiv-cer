@@ -24,7 +24,7 @@ class PDF_Robustecido(FPDF):
         self.ln(5)
 
 def sanitize_text(text):
-    """Reemplaza caracteres Unicode no soportados por FPDF (latin-1) por sus equivalentes ASCII."""
+    """Reemplaza caracteres Unicode no soportados por FPDF (latin-1) por sus equivalentes ASCII y normaliza espacios."""
     if text is None: return ""
     text_str = str(text)
     replacements = {
@@ -34,6 +34,7 @@ def sanitize_text(text):
     }
     for k, v in replacements.items():
         text_str = text_str.replace(k, v)
+    text_str = re.sub(r'[ \t]+', ' ', text_str)
     return text_str
 
 def sanitize_dataframe(df):

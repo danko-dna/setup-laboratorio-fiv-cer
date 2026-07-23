@@ -29,11 +29,11 @@ def parse_pdf(file_stream, filename_fallback=""):
 
     def clean_date_string(s):
         if not s: return ""
-        s_clean = str(s).strip()
         import re
+        s_clean = re.sub(r'\s+', ' ', str(s)).strip()
         m = re.search(r'(?:FECHA|TABLA\s+PABELL[OÓ]N(?:\s+DE\s+FECHA)?)\s*:?\s*(.+)', s_clean, re.IGNORECASE)
         if m and is_date_string(m.group(1)):
-            return m.group(1).strip()
+            return re.sub(r'\s+', ' ', m.group(1)).strip()
         return s_clean
     
     fecha_str = "Fecha No Encontrada"
