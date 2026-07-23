@@ -52,49 +52,43 @@ def add_time(hora_str, minutos):
 import math
 
 def is_receptor(proc_str, diag_str="", is_uso_interno=False):
-    """Detecta si la paciente es receptora de óvulos o un caso de desvitrificación de ovocitos.
-    Ambos casos tienen el mismo SOP (ICSI/FIV, placas, WP/TS, etc.).
+    """Detecta si la paciente es receptora de óvulos (frescos o vitrificados), desvitrificación o uso interno.
     Revisa tanto el campo PROC como el campo de diagnóstico/observaciones."""
     text = (str(proc_str) + " " + str(diag_str)).upper()
     
-    # Donantes / Vitrificación propia explícita no son receptoras
-    if is_donor_vitri(proc_str, diag_str):
-        return False
-        
-    # 1. Keywords directas de receptora
-    receptor_keywords = [
+    # 1. Keywords directas de receptora (frescos o congelados)
+    recept_direct = [
         "OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA",
         "RECEPCION", "RECEPCIÓN", "DESV", "DESVITRI", "DESCONGELAC", "DESVITRIFIC",
-        "OVOCITOS", "TED"
+        "DESCONGEL", "OVO FRESCO", "OVOS FRESCOS", "OVOS FRESCO", "OVO EN FRESCO",
+        "OVOS EN FRESCO", "TED"
     ]
-    if any(k in text for k in receptor_keywords):
+    if any(k in text for k in recept_direct):
         return True
-    
-    # 2. Desvitrificación/Descongelación de ovocitos
-    desv_prefixes = ["DESV", "DESCONGELAC", "DESVITRIFIC", "DESCONGEL"]
-    ovo_keywords = ["OVO", "OVOCITO", "OVOS"]
-    has_desv = any(d in text for d in desv_prefixes)
-    has_ovo = any(o in text for o in ovo_keywords)
-    if has_desv and has_ovo:
-        return True
-    
-    # 3. Si viene de la tabla de Uso Interno y no es Culdocentesis ni Donante, es receptora/desvitri
+        
+    # 2. Si es vitrificación / preservación pura (sin receptora), no es receptora
+    vitri_pure = ["VITRIFIC", "PRESERV", "OVO-D", "OVO D", "OVODONANTE"]
+    if any(k in text for k in vitri_pure):
+        return False
+        
+    # 3. Si viene de Uso Interno y no es Culdocentesis, es receptora por defecto
     if is_uso_interno and "CULDO" not in text and "CULDOCENTESIS" not in text:
         return True
         
     return False
 
 def is_donor_vitri(proc_str, diag_str=""):
-    """Detecta si la paciente es donante o caso de vitrificación/preservación.
+    """Detecta si la paciente es donante o caso de vitrificación/preservación pura.
     Estas pacientes NO deben llevar hora ICSI/FIV."""
     text = (str(proc_str) + " " + str(diag_str)).upper()
-    donor_keywords = ["OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE",
-                      "DONANTE", "VITRIFIC", "PRESERV", "VITRI OVOS"]
-    # No marcar como donante si explícitamente es receptora
-    # EVITAR recursión comprobando las palabras directas de receptora
-    recept_direct = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA", "DESV OVO", "DESVITRI"]
+    recept_direct = [
+        "OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA",
+        "DESV OVO", "DESVITRI", "OVO FRESCO", "OVOS FRESCOS", "OVOS FRESCO",
+        "OVO EN FRESCO", "OVOS EN FRESCO", "RECEPCION", "RECEPCIÓN", "DESCONGEL"
+    ]
     if any(k in text for k in recept_direct):
         return False
+    donor_keywords = ["OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE", "VITRIFIC", "PRESERV", "VITRI OVOS"]
     return any(k in text for k in donor_keywords)
 
 def calc_placa_g_ivf(max_folic, is_recept):
