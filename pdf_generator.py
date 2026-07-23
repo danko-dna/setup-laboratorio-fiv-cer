@@ -396,7 +396,6 @@ def generar_tabla_optimizada(fecha_str, df_punciones_orig, df_uso_interno_orig, 
                 
                 # Limpieza de Nombres de Médicos (quitar Dr. Dra. y dejar solo apellidos separados por /)
                 if 'médico' in col_name_lower or 'medico' in col_name_lower:
-                    import re
                     # Quitar prefijos y puntos con regex seguro (soporta "DRA.")
                     clean_text = re.sub(r'(?i)\bDr[a]?\b\.?\s*', '', texto)
                     # Separar por enters o slashes
@@ -473,6 +472,18 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             sanitized_dia5.append({k: sanitize_text(v) for k, v in d.items()})
         datos_dia5 = sanitized_dia5
     
+    # Detectar si hay Biopsia Testicular en las punciones o uso interno
+    has_biopsia_testicular = False
+    keywords_bt = ['BIOPSIA TESTICULAR', 'BX TESTICULAR', 'BX TEST', 'BIOPSIA', 'TESTICULAR', 'ASPIRACIÓN DE EPIDÍDIMO', 'ASPIRACION DE EPIDIDIMO']
+    for check_df in [df_punciones, df_uso_interno]:
+        if check_df is not None and not check_df.empty:
+            for _, r_check in check_df.iterrows():
+                r_text = " ".join(str(v).upper() for v in r_check.values if v is not None and str(v) != 'nan')
+                if any(kw in r_text for kw in keywords_bt) or re.search(r'\bBT\b', r_text):
+                    has_biopsia_testicular = True
+                    break
+            if has_biopsia_testicular: break
+
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -482,9 +493,10 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
     if os.path.exists('logo.png'):
         pdf.image('logo.png', x=160, y=10, w=35) # Esquina superior derecha
         
-    pdf.set_font('Arial', 'B', 14)
-    # Centrar el título de la hoja Setup
-    pdf.cell(0, 8, 'SETUP LABORATORIO FIV CER', ln=1, align='C')
+    pdf.set_font('Arial', 'B', 12)
+    # Centrar el título de la hoja Setup incluyendo la fecha del documento
+    titulo_setup = f"SETUP LABORATORIO FIV CER - {str(fecha_str).upper()}"
+    pdf.cell(0, 8, titulo_setup, ln=1, align='C')
     pdf.ln(5) # Añadir espacio de aire bajo el gran título central
     
     pdf.set_font('Arial', '', 9) # Letra más reducida para cabecera de Fecha para ganar aire
@@ -511,7 +523,6 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
 
     # --- HELPERS PARA NOMBRES Y DUPES ---
     def extraer_primer_apellido(nombre_completo):
-        import re
         # Extraer solo la primera persona si hay múltiples nombres (antes de un salto, guión, slash o " y ")
         parts = re.split(r'\n|/|-|\s+y\s+|\s+Y\s+', str(nombre_completo).strip())
         nombres_mujer = parts[0].strip().split()
@@ -534,7 +545,6 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         return Counter(first_surnames)
         
     def get_paciente_name(nombre_completo, surname_counts):
-        import re
         parts = re.split(r'\n|/|-|\s+y\s+|\s+Y\s+', str(nombre_completo).strip())
         nombres_mujer = parts[0].strip().split()
         
@@ -566,7 +576,6 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         keywords = ['BX TEST', 'BIOPSIA TESTICULAR', 'BX TESTICULAR', ' BT ', ' BT-', '-BT', 'PRP', 'PLASMA RICO']
         
         # Coincidencia exacta de BT, ya que "BT" podría ser parte de otra palabra (ej: OBTENER)
-        import re
         if re.search(r'\bBT\b', texto_busqueda):
             return True
             
@@ -605,7 +614,6 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
                 diagnostico += " " + str(row.get('OBSERVACIONES', ''))
             
             if not folic_str:
-                import re
                 text_to_search = str(row.get('PROC', '')) + " " + str(diagnostico)
                 nums = re.findall(r'\b(\d{1,2})\b', text_to_search)
                 if nums:
@@ -751,7 +759,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             
         pdf.ln(10)
 
-    # Añadir sección de checklist de Material Extra (estática)
+    # Añadir sección de checklist de Material Extra
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(80, 6, 'Material Extra Revisado', 1, 1, 'L', True)
     pdf.set_font('Arial', '', 8)
@@ -759,8 +767,16 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
              "Placas Vitri aireando", "Material Biopsia Testicular", "Goblets armados", "Gx-IVF gaseando",
              "Gx-TL gaseando", "PBS/Aspiration temperando", "Aceite abierto/cerrado"]
     for item in items:
-        pdf.cell(65, 5, item, 1)
-        pdf.cell(15, 5, "", 1, 1) # Checkbox box vacío
+        if item == "Material Biopsia Testicular" and has_biopsia_testicular:
+            pdf.set_fill_color(255, 255, 102) # Amarillo destacado
+            pdf.set_font('Arial', 'B', 8)
+            pdf.cell(65, 5, f"* {item} (REQUERIDO)", 1, 0, 'L', True)
+            pdf.cell(15, 5, "[  ]", 1, 1, 'C', True)
+            pdf.set_font('Arial', '', 8)
+            pdf.set_fill_color(255, 255, 255)
+        else:
+            pdf.cell(65, 5, item, 1)
+            pdf.cell(15, 5, "", 1, 1)
 
     pdf_output = pdf.output()
     return io.BytesIO(pdf_output)
