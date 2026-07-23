@@ -83,21 +83,21 @@ def parse_doc(file_stream, filename_fallback=""):
         return fecha_str, df_punciones, df_uso_interno, df_transferencias
     
     # Buscar fecha en el texto
-    meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 
-             'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE']
-    
+    from docx_parser import is_date_string, clean_date_string
     for line in text.split('\n'):
         line = line.strip()
-        if len(line) > 5 and len(line) < 80:
-            line_upper = line.upper()
-            has_month = any(m in line_upper for m in meses)
-            has_year = '202' in line_upper
-            if has_month and has_year:
-                fecha_str = line.strip()
+        if is_date_string(line):
+            fecha_clean = clean_date_string(line)
+            if fecha_clean:
+                fecha_str = fecha_clean
                 break
     
-    if fecha_str == "Fecha No Encontrada" and filename_fallback:
-        fecha_str = re.sub(r'\.doc$', '', filename_fallback, flags=re.IGNORECASE)
+    if (fecha_str == "Fecha No Encontrada" or not is_date_string(fecha_str)) and filename_fallback:
+        fname = re.sub(r'\.doc$', '', filename_fallback, flags=re.IGNORECASE)
+        fname_clean = re.sub(r'^(tabla|setup|uso_interno|optimizada)[_\s]*', '', fname, flags=re.IGNORECASE).strip()
+        fname_clean = fname_clean.replace('_', ' ')
+        if fname_clean and not fname_clean.upper() in ['PABELLON', 'PABELLÓN', 'TABLA PABELLON', 'TABLA PABELLÓN']:
+            fecha_str = fname_clean
     
     # Nota: La extracción de tablas desde .doc binario es limitada.
     # Se retornan DataFrames vacíos - el usuario verá un mensaje informativo.
