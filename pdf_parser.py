@@ -12,13 +12,29 @@ def parse_pdf(file_stream, filename_fallback=""):
     
     # Helper para identificar si un string parece una fecha
     def is_date_string(s):
-        s_upper = s.upper()
+        if not s or len(str(s).strip()) < 4:
+            return False
+        s_upper = str(s).upper().strip()
+        if s_upper in ['TABLA PABELLON', 'TABLA PABELLÓN', 'USO INTERNO LAB FIV', 'SALA TRANSFER']:
+            return False
+        import re
+        if re.search(r'\b\d{1,2}[/\.-]\d{1,2}[/\.-]\d{2,4}\b', s_upper):
+            return True
         meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE']
         dias = ['LUNES', 'MARTES', 'MIERCOLES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SABADO', 'SÁBADO', 'DOMINGO']
         has_month = any(m in s_upper for m in meses)
         has_day = any(d in s_upper for d in dias)
-        has_year = '202' in s_upper
-        return (has_month and has_year) or (has_day and has_month)
+        has_year = '202' in s_upper or '201' in s_upper
+        return (has_month and (has_year or has_day)) or (has_day and (has_month or re.search(r'\d{1,2}', s_upper)))
+
+    def clean_date_string(s):
+        if not s: return ""
+        s_clean = str(s).strip()
+        import re
+        m = re.search(r'(?:FECHA|TABLA\s+PABELL[OÓ]N(?:\s+DE\s+FECHA)?)\s*:?\s*(.+)', s_clean, re.IGNORECASE)
+        if m and is_date_string(m.group(1)):
+            return m.group(1).strip()
+        return s_clean
     
     fecha_str = "Fecha No Encontrada"
     candidates = []
@@ -49,16 +65,16 @@ def parse_pdf(file_stream, filename_fallback=""):
     # Evaluar candidatos y elegir el primero que parezca fecha
     for cand in candidates:
         if is_date_string(cand):
-            fecha_str = cand
+            fecha_str = clean_date_string(cand)
             break
     
-    # Fallback clásico
-    if fecha_str == "Fecha No Encontrada" and candidates:
-        fecha_str = candidates[0]
-    
-    # Fallback final al nombre de archivo
-    if fecha_str == "Fecha No Encontrada" and filename_fallback:
-        fecha_str = re.sub(r'\.pdf$|\.docx$', '', filename_fallback, flags=re.IGNORECASE)
+    # Fallback al nombre de archivo si no encontramos fecha formal
+    if (fecha_str == "Fecha No Encontrada" or not is_date_string(fecha_str)) and filename_fallback:
+        import re
+        fname = re.sub(r'\.docx$|\.pdf$|\.doc$', '', filename_fallback, flags=re.IGNORECASE)
+        fname_clean = re.sub(r'^(tabla|setup|uso_interno|optimizada)[_\s]*', '', fname, flags=re.IGNORECASE).strip()
+        if fname_clean:
+            fecha_str = fname_clean.replace('_', ' ')
     
     # Clasificar las tablas extraídas
     for table_data in all_tables_data:

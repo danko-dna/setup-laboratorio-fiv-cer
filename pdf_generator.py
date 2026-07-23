@@ -2,6 +2,7 @@ from fpdf import FPDF
 from utils_clinica import add_time, get_max_follicles, calculate_plates, is_receptor, is_donor_vitri, calc_placa_g_ivf, calc_placa_icsi, calc_placa_embryoscope, calc_placa_cultivo_trad, calc_wp_ts
 import io
 import pandas as pd
+import re
 
 class PDF_Robustecido(FPDF):
     def __init__(self, fecha_doc):
@@ -77,12 +78,12 @@ def sanitize_dataframe(df):
             pass  # Saltar columnas problemáticas
     return df_clean
 
-def aplicar_sop_columnas_punciones(df):
+def aplicar_sop_columnas_punciones(df, is_uso_interno_table=False):
     df_mod = df.copy()
     if df_mod.empty: return df_mod
     
     col_hora = next((c for c in df_mod.columns if 'hora' in c.lower()), None)
-    col_folic = next((c for c in df_mod.columns if 'fol' in c.lower() or 'desvitri' in c.lower()), None)
+    col_folic = next((c for c in df_mod.columns if any(k in c.lower() for k in ['fol', 'desvitri', 'ovo']) and 'decu' not in c.lower()), None)
     col_semen = next((c for c in df_mod.columns if 'semen' in c.lower()), None)
     
     idx_insert_decu = df_mod.columns.get_loc(col_folic) + 1 if col_folic else len(df_mod.columns)
@@ -100,7 +101,7 @@ def aplicar_sop_columnas_punciones(df):
         semen_str = str(row[col_semen]) if col_semen else ""
         
         # Detección ampliada: revisar PROC + diagnóstico/observaciones
-        is_recept = is_receptor(proc, diag)
+        is_recept = is_receptor(proc, diag, is_uso_interno=is_uso_interno_table)
         is_donor = is_donor_vitri(proc, diag)
         
         # Abreviar CULDOCENTESIS a CULDO a pedimento del usuario para ahorrar espacio
@@ -111,7 +112,7 @@ def aplicar_sop_columnas_punciones(df):
             proc = proc.replace('BIOPSIA', 'Bx')
             df_mod.at[idx, 'PROC'] = proc
             
-        if 'CULDOCENTESIS' in proc or 'CULDO' in proc:
+        if ('CULDOCENTESIS' in proc or 'CULDO' in proc) and not is_recept:
             if hora_str:
                 df_mod.at[idx, 'DECU OVO'] = add_time(hora_str, 110)
                 
@@ -119,17 +120,27 @@ def aplicar_sop_columnas_punciones(df):
             is_vitri = any(k in diag for k in vitri_keywords) or any(k in proc for k in vitri_keywords)
             
             if col_semen and hora_str and semen_str.strip() and semen_str != "--" and not is_vitri:
-                df_mod.at[idx, col_semen] = f"{semen_str}\n({add_time(hora_str, 130)})"
+                if not re.search(r'\(\d{1,2}:\d{2}\)', semen_str):
+                    df_mod.at[idx, col_semen] = f"{semen_str}\n({add_time(hora_str, 130)})"
             
             if not is_vitri and hora_str:
                 df_mod.at[idx, 'ICSI/FIV'] = f"{add_time(hora_str, 240)} - {add_time(hora_str, 360)}"
                 
-        elif is_recept:
-            # Receptora (OVO-R, OVO-R CRIO, etc.): Semen 1h antes, ICSI/FIV rango 3-4h
-            if col_semen and hora_str and semen_str.strip() and semen_str != "--":
-                df_mod.at[idx, col_semen] = f"{semen_str}\n({add_time(hora_str, -60)})"
-            if hora_str:
-                df_mod.at[idx, 'ICSI/FIV'] = f"{add_time(hora_str, 180)} - {add_time(hora_str, 240)}"
+        elif is_recept or is_uso_interno_table:
+            if is_donor:
+                df_mod.at[idx, 'ICSI/FIV'] = ""
+            else:
+                # Receptora / Desvitrificación (OVO-R, OVO-R CRIO, etc.): Semen 1h antes, ICSI/FIV rango 3-4h
+                if col_semen and hora_str and semen_str.strip() and semen_str != "--":
+                    if not re.search(r'\(\d{1,2}:\d{2}\)', semen_str):
+                        df_mod.at[idx, col_semen] = f"{semen_str}\n({add_time(hora_str, -60)})"
+                if hora_str:
+                    time_start = add_time(hora_str, 180)
+                    time_end = add_time(hora_str, 240)
+                    if time_start and time_end:
+                        df_mod.at[idx, 'ICSI/FIV'] = f"{time_start} - {time_end}"
+                    elif time_start:
+                        df_mod.at[idx, 'ICSI/FIV'] = time_start
         
         # Regla general: Donantes/Vitrificación NUNCA llevan ICSI/FIV
         if is_donor:
@@ -315,8 +326,8 @@ def generar_tabla_optimizada(fecha_str, df_punciones_orig, df_uso_interno_orig, 
     pdf = PDF_Robustecido(fecha_str)
     
     # Pre-procesar y Sanitizar DataFrames
-    df_punciones = aplicar_sop_columnas_punciones(sanitize_dataframe(df_punciones_orig))
-    df_uso_interno = aplicar_sop_columnas_punciones(sanitize_dataframe(df_uso_interno_orig))
+    df_punciones = aplicar_sop_columnas_punciones(sanitize_dataframe(df_punciones_orig), is_uso_interno_table=False)
+    df_uso_interno = aplicar_sop_columnas_punciones(sanitize_dataframe(df_uso_interno_orig), is_uso_interno_table=True)
     df_transferencias = aplicar_sop_columnas_transferencias(sanitize_dataframe(df_transferencias_orig))
     
     # --- FUNCIÓN AUXILIAR PARA DIBUJAR TABLAS (DRY) ---
@@ -577,17 +588,14 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             nombre_completo = str(row.get('NOMBRE', '')).strip()
             paciente = get_paciente_name(nombre_completo, surname_counts_d0)
             
-            # Buscar dinámicamente columnas de Ovos Desvitri
+            # Buscar dinámicamente columnas de Ovos / Folículos
             folic_str = ""
-            if 'N° FOLIC' in row and pd.notna(row['N° FOLIC']) and str(row['N° FOLIC']).strip() and str(row['N° FOLIC']).strip() != 'nan':
-                folic_str = str(row['N° FOLIC'])
-            else:
-                # Buscar variante de OVOS DESVITRI, OVOS A DESCONGELAR, o simplemente OVOS
-                ovo_cols = [c for c in row.index if 'ovo' in str(c).lower() and 'decu' not in str(c).lower()]
-                if ovo_cols and pd.notna(row[ovo_cols[0]]):
-                    folic_str = str(row[ovo_cols[0]])
-            
-            if folic_str == 'nan': folic_str = ""
+            matching_cols = [c for c in row.index if any(k in str(c).lower() for k in ['fol', 'ovo', 'desvitri', 'cant']) and 'decu' not in str(c).lower()]
+            for col in matching_cols:
+                val = str(row[col]).strip() if pd.notna(row[col]) else ""
+                if val and val != 'nan':
+                    folic_str = val
+                    break
             
             # Columnas del Dataframe (dependiendo si es Punción o Ovos Desvitri)
             diagnostico = str(row.get('MÉTODO/OBS', '')) # o DIAGNOSTICO en la otra tabla
@@ -596,15 +604,27 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             if 'OBSERVACIONES' in row:
                 diagnostico += " " + str(row.get('OBSERVACIONES', ''))
             
+            if not folic_str:
+                import re
+                text_to_search = str(row.get('PROC', '')) + " " + str(diagnostico)
+                nums = re.findall(r'\b(\d{1,2})\b', text_to_search)
+                if nums:
+                    valid_nums = [n for n in nums if 1 <= int(n) <= 40]
+                    if valid_nums:
+                        folic_str = valid_nums[0]
+                        
+            if folic_str == 'nan': folic_str = ""
+            
             # Detección ampliada: revisar PROC + diagnóstico para detectar OVO-R CRIO y variantes
-            es_receptor = is_receptor(row.get('PROC', ''), diagnostico)
+            has_ovo_col = any('ovo' in str(c).lower() and 'decu' not in str(c).lower() for c in row.index)
+            es_receptor = is_receptor(row.get('PROC', ''), diagnostico, is_uso_interno=has_ovo_col)
             semen = str(row.get('SEMEN', ''))
                 
             max_f = get_max_follicles(folic_str)
             
             # Cálculos SOP:
             val_g_ivf = calc_placa_g_ivf(max_f, es_receptor)
-            val_icsi = calc_placa_icsi(max_f, semen)
+            val_icsi = calc_placa_icsi(max_f, semen, is_recept=es_receptor)
             
             # Filtro para dejar Placa ICSI vacía en preservación/vitrificación/ovodonas
             vitri_keywords = ["OVO-D", "OVODONANTE", "DONANTE", "PRESERVACIÓN DE FERTILIDAD", 

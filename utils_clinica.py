@@ -31,43 +31,57 @@ def calculate_plates(max_follicles):
 
 def add_time(hora_str, minutos):
     """
-    Suma minutos a una hora en formato HH:MM.
-    Ej: add_time("08:00", 130) -> "10:10"
+    Suma minutos a una hora en formato HH:MM o HH.MM.
+    Ej: add_time("08:00", 130) -> "10:10", add_time("09.00", 180) -> "12:00"
     """
-    # Intentar limpiar el texto primero
-    match = re.search(r'\d{1,2}:\d{2}', str(hora_str))
+    if pd.isna(hora_str) or not str(hora_str).strip():
+        return ""
+    s = str(hora_str).strip()
+    s = re.sub(r'(\d{1,2})[.,](\d{2})', r'\1:\2', s)
+    match = re.search(r'\b(\d{1,2}):(\d{2})\b', s)
     if not match:
         return ""
     
     try:
-        dt = datetime.strptime(match.group(), "%H:%M")
-        nuevo_dt = dt + timedelta(minutes=minutos)
-        return nuevo_dt.strftime("%H:%M")
+        h, m = int(match.group(1)), int(match.group(2))
+        dt = datetime(2026, 1, 1, h, m) + timedelta(minutes=minutos)
+        return dt.strftime("%H:%M")
     except:
         return ""
 
 import math
 
-def is_receptor(proc_str, diag_str=""):
+def is_receptor(proc_str, diag_str="", is_uso_interno=False):
     """Detecta si la paciente es receptora de óvulos o un caso de desvitrificación de ovocitos.
     Ambos casos tienen el mismo SOP (ICSI/FIV, placas, WP/TS, etc.).
     Revisa tanto el campo PROC como el campo de diagnóstico/observaciones."""
     text = (str(proc_str) + " " + str(diag_str)).upper()
     
+    # Donantes / Vitrificación propia explícita no son receptoras
+    if is_donor_vitri(proc_str, diag_str):
+        return False
+        
     # 1. Keywords directas de receptora
-    receptor_keywords = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA"]
+    receptor_keywords = [
+        "OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA",
+        "RECEPCION", "RECEPCIÓN", "DESV", "DESVITRI", "DESCONGELAC", "DESVITRIFIC",
+        "OVOCITOS", "TED"
+    ]
     if any(k in text for k in receptor_keywords):
         return True
     
-    # 2. Desvitrificación/Descongelación de ovocitos (mismo SOP que receptora)
-    #    Detecta combinaciones como: DESV OVO, DESVITRI OVOS, DESCONGELACIÓN OVOCITOS, etc.
-    desv_prefixes = ["DESV", "DESCONGELAC", "DESVITRIFIC"]
-    ovo_keywords = ["OVO", "OVOCITO"]
+    # 2. Desvitrificación/Descongelación de ovocitos
+    desv_prefixes = ["DESV", "DESCONGELAC", "DESVITRIFIC", "DESCONGEL"]
+    ovo_keywords = ["OVO", "OVOCITO", "OVOS"]
     has_desv = any(d in text for d in desv_prefixes)
     has_ovo = any(o in text for o in ovo_keywords)
     if has_desv and has_ovo:
         return True
     
+    # 3. Si viene de la tabla de Uso Interno y no es Culdocentesis ni Donante, es receptora/desvitri
+    if is_uso_interno and "CULDO" not in text and "CULDOCENTESIS" not in text:
+        return True
+        
     return False
 
 def is_donor_vitri(proc_str, diag_str=""):
@@ -77,7 +91,9 @@ def is_donor_vitri(proc_str, diag_str=""):
     donor_keywords = ["OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE",
                       "DONANTE", "VITRIFIC", "PRESERV", "VITRI OVOS"]
     # No marcar como donante si explícitamente es receptora
-    if is_receptor(proc_str, diag_str):
+    # EVITAR recursión comprobando las palabras directas de receptora
+    recept_direct = ["OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA", "DESV OVO", "DESVITRI"]
+    if any(k in text for k in recept_direct):
         return False
     return any(k in text for k in donor_keywords)
 
@@ -87,32 +103,29 @@ def calc_placa_g_ivf(max_folic, is_recept):
     # Por cada culdocentesis ingresada, como mínimo 1 placa G-IVF
     return str(max(1, math.ceil(max_folic / 20.0)))
 
-def calc_placa_icsi(max_folic, semen_str):
+def calc_placa_icsi(max_folic, semen_str, is_recept=False):
     keywords = ["CRIO BT", "SEMEN BT", "BT", "BIOPSIA TESTICULAR", "ASPIRACIÓN DE EPIDÍDIMO", "ASPIRACION DE EPIDIDIMO", "EPIDÍDIMO", "EPIDIDIMO"]
     semen_upper = str(semen_str).upper()
     if any(k in semen_upper for k in keywords):
         return "Medio Tamponado/Pentoxifilina"
     if max_folic <= 0:
+        if is_recept:
+            return "1"
         return ""
     return str(math.ceil(max_folic / 4.0))
 
 def calc_placa_embryoscope(proc_str, diag_str, max_folic, is_recept):
-    if max_folic <= 0:
-        return ""
-        
     # Salida directa y garantizada para receptoras y ovos desvitri (sobrepasa filtros de exclusión)
     if is_recept:
         return "1"
+    if max_folic <= 0:
+        return ""
         
     text = str(proc_str).upper() + " " + str(diag_str).upper()
-    # Si la OBTENCIÓN es fresca para guardar futuras, no inyecta
-    # Nota: Excluimos las Descongelaciones (OVO-R, OVOS DESVITRI) de la restricción, pues ELLAS SÍ INYECTAN
     freeze_keywords = ["VITRIFICACIÓN", "VITRIFICACION", "PRESERVACIÓN", "PRESERVACION", "OVO-D", "DONANTE", "OVODONANTE"]
     
     # Check para Freeze-Alls
     if any(k in text for k in freeze_keywords):
-        # Excepción: Si es una Ovodonante o Preservación, no usa Embryoscope
-        # (Sin embargo, las receptoras u ovos desvitri sí deberían caer al default de abajo)
         return ""
         
     return "1"
@@ -130,5 +143,5 @@ def calc_wp_ts(ovos_desvitri_str, is_recept):
         return ""
     max_ovos = get_max_follicles(ovos_desvitri_str)
     if max_ovos <= 0:
-        return ""
+        return "1"
     return str(math.ceil(max_ovos / 4.0))
