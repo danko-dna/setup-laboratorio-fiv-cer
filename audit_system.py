@@ -49,8 +49,9 @@ for f in files:
         
         # Verificar Fecha en Header de Tabla
         primera_linea_t = texto_t.split('\n')[0] if texto_t else ""
-        if fecha.upper() not in primera_linea_t.upper() and fecha.upper() not in texto_t.upper():
-            res["errores"].append(f"FECHA TABLA NO VISIBLE: Esperado '{fecha}' en header, primera linea: '{primera_linea_t}'")
+        if fecha.upper() not in ['TABLA PABELLON', 'TABLA PABELLÓN', 'FECHA DESCONOCIDA']:
+            if fecha.upper() not in primera_linea_t.upper() and fecha.upper() not in texto_t.upper():
+                res["errores"].append(f"FECHA TABLA NO VISIBLE: Esperado '{fecha}' en header, primera linea: '{primera_linea_t}'")
             
         # Verificar Uso Interno ICSI/FIV en Tabla si hay Uso Interno
         if not df_ui.empty:
@@ -84,8 +85,9 @@ for f in files:
         pdf_s.close()
         
         # Verificar Fecha en Título de Setup
-        if fecha.upper() not in texto_s.upper():
-            res["errores"].append(f"FECHA SETUP NO VISIBLE: '{fecha}' no encontrada en el PDF del Setup")
+        if fecha.upper() not in ['TABLA PABELLON', 'TABLA PABELLÓN', 'FECHA DESCONOCIDA']:
+            if fecha.upper() not in texto_s.upper():
+                res["errores"].append(f"FECHA SETUP NO VISIBLE: '{fecha}' no encontrada en el PDF del Setup")
             
         # Verificar Placa ICSI y Placa Embryo en Setup para Ovoreceptoras
         df_dia0 = pd.concat([df_p, df_ui], ignore_index=True)

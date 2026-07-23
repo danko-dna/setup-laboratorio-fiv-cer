@@ -323,8 +323,10 @@ def draw_multiline_row(pdf, col_widths, row_data, fill_colors, min_line_height=4
     pdf.set_xy(x_start_row, y_start + row_h)
 
 def generar_tabla_optimizada(fecha_str, df_punciones_orig, df_uso_interno_orig, df_transferencias_orig):
-    fecha_str = sanitize_text(fecha_str)
-    pdf = PDF_Robustecido(fecha_str)
+    fecha_clean = str(fecha_str).strip()
+    if not fecha_clean or fecha_clean.upper() in ['TABLA PABELLON', 'TABLA PABELLÓN', 'FECHA NO ENCONTRADA', 'TABLA']:
+        fecha_clean = "Fecha No Especificada"
+    pdf = PDF_Robustecido(fecha_clean)
     
     # Pre-procesar y Sanitizar DataFrames
     df_punciones = aplicar_sop_columnas_punciones(sanitize_dataframe(df_punciones_orig), is_uso_interno_table=False)
@@ -459,7 +461,10 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
     Genera el PDF emulando "SETUP LAB FIV CER - Hoja 1.pdf".
     Combina Punciones y Uso Interno para iterar Día 0.
     """
-    fecha_str = sanitize_text(fecha_str)
+    fecha_clean = str(fecha_str).strip()
+    if not fecha_clean or fecha_clean.upper() in ['TABLA PABELLON', 'TABLA PABELLÓN', 'FECHA NO ENCONTRADA', 'TABLA']:
+        fecha_clean = "Fecha No Especificada"
+        
     responsable = sanitize_text(responsable)
     
     df_punciones = sanitize_dataframe(df_punciones)
@@ -496,7 +501,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         
     pdf.set_font('Arial', 'B', 12)
     # Centrar el título de la hoja Setup incluyendo la fecha del documento
-    titulo_setup = f"SETUP LABORATORIO FIV CER - {str(fecha_str).upper()}"
+    titulo_setup = f"SETUP LABORATORIO FIV CER - {fecha_clean.upper()}"
     pdf.cell(0, 8, titulo_setup, ln=1, align='C')
     pdf.ln(5) # Añadir espacio de aire bajo el gran título central
     
@@ -504,7 +509,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
     pdf.cell(25, 5, 'Fecha:', border=1)
     
     # Fecha capitalizada estilo Título (Primera letra mayúscula de cada palabra)
-    pdf.cell(50, 5, str(fecha_str).title(), border=1, ln=1)
+    pdf.cell(50, 5, fecha_clean.title(), border=1, ln=1)
     
     pdf.cell(25, 5, 'Responsable:', border=1)
     pdf.cell(50, 5, str(responsable)[:20], border=1, ln=1)
