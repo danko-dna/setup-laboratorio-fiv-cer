@@ -132,10 +132,53 @@ def calc_placa_cultivo_trad(max_folic):
     placas = 1 + math.floor((max_folic - 17) / 10.0)
     return str(placas)
 
-def calc_wp_ts(ovos_desvitri_str, is_recept):
-    if not is_recept:
+def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str=""):
+    """
+    SOP para WP y TS:
+    1. Si es OVO FRESCO / OVOR FRESCO / OVO-R FRESCO (Receptora en fresco), NO lleva WP ni TS (vacío "").
+    2. Si es Desvitrificación / Descongelación de Ovocitos (CRIO / DESV / DESVITRI):
+       - 3/4 ovocitos -> 1 WP y 1 TS.
+       - 8/10 ovocitos -> 3 WP y 3 TS.
+       - 12/14 ovocitos -> 4 WP y 4 TS.
+       - Por cada ~3.5 ovocitos adicionales -> +1 WP y +1 TS.
+    3. Si es Punción de Pabellón normal:
+       - Si max_folic >= 16 -> 2 WP y 2 TS.
+       - Si max_folic >= 8 -> 1 WP y 1 TS.
+       - Si max_folic < 8 -> vacíos.
+    """
+    text = (str(proc_str) + " " + str(diag_str)).upper()
+    
+    # Check Receptora en Fresco (NO desvitrificación)
+    fresco_keywords = ["OVO FRESCO", "OVOR FRESCO", "OVO-R FRESCO", "OVOS FRESCOS", "OVOS FRESCO", "OVO EN FRESCO", "OVOS EN FRESCO"]
+    is_fresco = any(k in text for k in fresco_keywords)
+    
+    if is_fresco:
         return ""
-    max_ovos = get_max_follicles(ovos_desvitri_str)
-    if max_ovos <= 0:
+        
+    # Check Desvitrificación / Descongelación
+    desv_keywords = ["DESV", "DESVITRI", "CRIO", "DESCONGEL"]
+    is_desvitri = any(k in text for k in desv_keywords) or (is_recept and not is_fresco)
+    
+    max_f = get_max_follicles(folic_str)
+    
+    if is_desvitri:
+        if max_f <= 0:
+            return "1"
+        elif max_f <= 4:
+            return "1"
+        elif max_f <= 7:
+            return "2"
+        elif max_f <= 10:
+            return "3"
+        elif max_f <= 14:
+            return "4"
+        else:
+            return str(math.ceil(max_f / 3.5))
+            
+    # Punción normal (Pabellón)
+    if max_f >= 16:
+        return "2"
+    elif max_f >= 8:
         return "1"
-    return str(math.ceil(max_ovos / 4.0))
+        
+    return ""

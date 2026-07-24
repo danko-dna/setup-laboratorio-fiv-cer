@@ -656,7 +656,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
                 
             val_embryoscope = calc_placa_embryoscope(row.get('PROC', ''), diagnostico, max_f, es_receptor)
             val_cultivo_trad = calc_placa_cultivo_trad(max_f)
-            val_wp_ts = calc_wp_ts(folic_str, es_receptor) # Asumiendo que Foli (F/DV) tiene el nº
+            val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico)
             
             pdf.cell(widths_d0[0], 6, str(count), 1, 0, 'C')
             pdf.cell(widths_d0[1], 6, paciente[:40], 1)
