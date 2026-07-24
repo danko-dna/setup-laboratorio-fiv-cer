@@ -528,22 +528,46 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         pdf.set_font('Arial', '', 8)
 
     # --- HELPERS PARA NOMBRES Y DUPES ---
+    def clean_person_name(text):
+        if not text: return ""
+        lines = [l.strip() for l in str(text).split('\n') if l.strip()]
+        if not lines: return ""
+        first_line = lines[0]
+        
+        # Eliminar RUTs / Cédulas / DNI / Pasaportes / Números
+        first_line = re.sub(r'^\s*\d{1,2}[\.\s]?\d{3}[\.\s]?\d{3}[-\s]?[kK0-9]\s*', '', first_line)
+        first_line = re.sub(r'\b\d{1,2}[\.\s]?\d{3}[\.\s]?\d{3}[-\s]?[kK0-9]\b', '', first_line)
+        first_line = re.sub(r'\b\d{6,9}[-\s]?[kK0-9]\b', '', first_line)
+        first_line = re.sub(r'\bPASS\s+[A-Z0-9]+\b', '', first_line, flags=re.IGNORECASE)
+        first_line = re.sub(r'\bAK\s+\d+\b', '', first_line, flags=re.IGNORECASE)
+        first_line = re.sub(r'\b\d{1,3}\b', '', first_line)
+        first_line = re.sub(r'\([^\)]*\)', '', first_line)
+        first_line = re.sub(r'\b(DR|DRA|DOCTOR|DOCTORA|DONANTE|RECEPTORA|OVO-R|OVOR)\b', '', first_line, flags=re.IGNORECASE)
+        
+        parts = re.split(r'/|\s+y\s+|\s+Y\s+', first_line)
+        return parts[0].strip()
+
     def extraer_primer_apellido(nombre_completo):
-        # Extraer solo la primera persona si hay múltiples nombres (antes de un salto, guión, slash o " y ")
-        parts = re.split(r'\n|/|-|\s+y\s+|\s+Y\s+', str(nombre_completo).strip())
-        nombres_mujer = parts[0].strip().split()
+        clean = clean_person_name(nombre_completo)
+        if not clean: return ""
         
-        if not nombres_mujer: return ""
+        if ',' in clean:
+            pre_coma = clean.split(',')[0].strip().split()
+            if pre_coma:
+                return pre_coma[0].upper()
+                
+        clean_alpha = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', ' ', clean)
+        words = clean_alpha.split()
         
-        # Lógica heurística para nombres hispanos (Nombre Apellido1 Apellido2)
-        if len(nombres_mujer) >= 3:
-            apellido = nombres_mujer[-2] # Penúltima palabra suele ser Apellido Paterno
-        elif len(nombres_mujer) == 2:
-            apellido = nombres_mujer[-1] # "Daniela PEREZ"
-        else:
-            apellido = nombres_mujer[0] # Solo 1 palabra ("PEREZ")
+        if not words: return ""
+        if len(words) == 1:
+            return words[0].upper()
+        if len(words) == 2:
+            return words[1].upper()
+        if len(words) == 3:
+            return words[1].upper()
             
-        return apellido.upper()
+        return words[-2].upper()
 
     def get_surname_counts(names_list):
         from collections import Counter
@@ -551,19 +575,18 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         return Counter(first_surnames)
         
     def get_paciente_name(nombre_completo, surname_counts):
-        parts = re.split(r'\n|/|-|\s+y\s+|\s+Y\s+', str(nombre_completo).strip())
-        nombres_mujer = parts[0].strip().split()
-        
-        if not nombres_mujer: return ""
-        
         surname1 = extraer_primer_apellido(nombre_completo)
-        
+        if not surname1:
+            return str(nombre_completo)[:20].upper()
+            
         # Si el primer apellido se repite en esta misma tabla, intentamos sacar el segundo
-        if surname_counts.get(surname1, 0) > 1 and len(nombres_mujer) > 1:
-            # Buscar el apellido materno (última palabra)
-            surname2 = nombres_mujer[-1].upper()
-            if surname2 != surname1:
-                return f"{surname1} {surname2}"
+        if surname_counts.get(surname1, 0) > 1:
+            clean = clean_person_name(nombre_completo)
+            words = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', ' ', clean).split()
+            if len(words) >= 3:
+                surname2 = words[-1].upper()
+                if surname2 != surname1:
+                    return f"{surname1} {surname2}"
         return surname1
 
     # --- TABLA 1: DÍA 0 ---
@@ -597,11 +620,13 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         
     if not df_dia0.empty:
         draw_table_header('Día 0', cols_d0, widths_d0)
+        n_punciones_count = len(df_punciones) if df_punciones is not None else 0
         surname_counts_d0 = get_surname_counts(df_dia0.get('NOMBRE', []))
         count = 1
-        for _, row in df_dia0.iterrows():
+        for idx_row, row in df_dia0.iterrows():
             nombre_completo = str(row.get('NOMBRE', '')).strip()
             paciente = get_paciente_name(nombre_completo, surname_counts_d0)
+            is_pabellon_row = (idx_row < n_punciones_count)
             
             # Buscar dinámicamente columnas de Ovos / Folículos
             folic_str = ""
@@ -656,7 +681,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
                 
             val_embryoscope = calc_placa_embryoscope(row.get('PROC', ''), diagnostico, max_f, es_receptor)
             val_cultivo_trad = calc_placa_cultivo_trad(max_f)
-            val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico)
+            val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico, is_pabellon=is_pabellon_row)
             
             pdf.cell(widths_d0[0], 6, str(count), 1, 0, 'C')
             pdf.cell(widths_d0[1], 6, paciente[:40], 1)

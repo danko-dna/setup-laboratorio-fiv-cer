@@ -132,20 +132,21 @@ def calc_placa_cultivo_trad(max_folic):
     placas = 1 + math.floor((max_folic - 17) / 10.0)
     return str(placas)
 
-def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str=""):
+def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str="", is_pabellon=False):
     """
     SOP para WP y TS:
-    1. Si es OVO FRESCO / OVOR FRESCO / OVO-R FRESCO (Receptora en fresco), NO lleva WP ni TS (vacío "").
-    2. Si es Desvitrificación / Descongelación de Ovocitos (CRIO / DESV / DESVITRI):
-       - 3/4 ovocitos -> 1 WP y 1 TS.
-       - 8/10 ovocitos -> 3 WP y 3 TS.
-       - 12/14 ovocitos -> 4 WP y 4 TS.
-       - Por cada ~3.5 ovocitos adicionales -> +1 WP y +1 TS.
-    3. Si es Punción de Pabellón normal:
-       - Si max_folic >= 16 -> 2 WP y 2 TS.
-       - Si max_folic >= 8 -> 1 WP y 1 TS.
-       - Si max_folic < 8 -> vacíos.
+    1. Las punciones de Pabellón (Culdocentesis) NUNCA llevan WP ni TS (vacío "").
+    2. Si es OVO FRESCO / OVOR FRESCO / OVO-R FRESCO (Receptora en fresco), Tampoco lleva WP ni TS (vacío "").
+    3. WP y TS se activan ÚNICAMENTE en la tabla de USO INTERNO LAB FIV para Desvitrificación / Descongelación de Ovocitos:
+       - 1 a 4 ovocitos -> 1 WP y 1 TS.
+       - 5 a 7 ovocitos -> 2 WP y 2 TS.
+       - 8 a 10 ovocitos -> 3 WP y 3 TS.
+       - 11 a 14 ovocitos -> 4 WP y 4 TS.
+       - > 14 ovocitos -> math.ceil(max_f / 3.5) WP y TS.
     """
+    if is_pabellon:
+        return ""
+        
     text = (str(proc_str) + " " + str(diag_str)).upper()
     
     # Check Receptora en Fresco (NO desvitrificación)
@@ -159,26 +160,20 @@ def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str=""):
     desv_keywords = ["DESV", "DESVITRI", "CRIO", "DESCONGEL"]
     is_desvitri = any(k in text for k in desv_keywords) or (is_recept and not is_fresco)
     
+    if not is_desvitri:
+        return ""
+        
     max_f = get_max_follicles(folic_str)
     
-    if is_desvitri:
-        if max_f <= 0:
-            return "1"
-        elif max_f <= 4:
-            return "1"
-        elif max_f <= 7:
-            return "2"
-        elif max_f <= 10:
-            return "3"
-        elif max_f <= 14:
-            return "4"
-        else:
-            return str(math.ceil(max_f / 3.5))
-            
-    # Punción normal (Pabellón)
-    if max_f >= 16:
-        return "2"
-    elif max_f >= 8:
+    if max_f <= 0:
         return "1"
-        
-    return ""
+    elif max_f <= 4:
+        return "1"
+    elif max_f <= 7:
+        return "2"
+    elif max_f <= 10:
+        return "3"
+    elif max_f <= 14:
+        return "4"
+    else:
+        return str(math.ceil(max_f / 3.5))
