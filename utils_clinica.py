@@ -78,8 +78,8 @@ def is_receptor(proc_str, diag_str="", is_uso_interno=False):
     return False
 
 def is_donor_vitri(proc_str, diag_str=""):
-    """Detecta si la paciente es donante o caso de vitrificación/preservación pura.
-    Estas pacientes NO deben llevar hora ICSI/FIV."""
+    """Detecta si la paciente es donante o caso de vitrificación/preservación/criopreservación pura.
+    Estas pacientes NO deben llevar hora ICSI/FIV ni placas de ICSI, Embryoscope, Cultivo Trad, WP ni TS."""
     text = (str(proc_str) + " " + str(diag_str)).upper()
     recept_direct = [
         "OVO-R", "OVOR", "OVO R", "OVOS PROPIOS", "RECEPTORA", "OVORECEPTORA",
@@ -88,7 +88,10 @@ def is_donor_vitri(proc_str, diag_str=""):
     ]
     if any(k in text for k in recept_direct):
         return False
-    donor_keywords = ["OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE", "VITRIFIC", "PRESERV", "VITRI OVOS"]
+    donor_keywords = [
+        "OVO-D", "OVO D", "OVODONANTE", "OVO DONANTE", "VITRIFIC", "PRESERV", 
+        "CRIO OVO", "CRIO OVOS", "CRIOPRESERV", "FREEZE ALL", "FREEZE-ALL", "FREEZEALL"
+    ]
     return any(k in text for k in donor_keywords)
 
 def calc_placa_g_ivf(max_folic, is_recept):
@@ -115,11 +118,7 @@ def calc_placa_embryoscope(proc_str, diag_str, max_folic, is_recept):
     if max_folic <= 0:
         return ""
         
-    text = str(proc_str).upper() + " " + str(diag_str).upper()
-    freeze_keywords = ["VITRIFICACIÓN", "VITRIFICACION", "PRESERVACIÓN", "PRESERVACION", "OVO-D", "DONANTE", "OVODONANTE"]
-    
-    # Check para Freeze-Alls
-    if any(k in text for k in freeze_keywords):
+    if is_donor_vitri(proc_str, diag_str):
         return ""
         
     return "1"

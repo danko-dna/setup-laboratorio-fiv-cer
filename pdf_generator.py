@@ -665,23 +665,18 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             val_g_ivf = calc_placa_g_ivf(max_f, es_receptor)
             val_icsi = calc_placa_icsi(max_f, semen, is_recept=es_receptor)
             
-            # Filtro para dejar Placa ICSI vacía en preservación/vitrificación/ovodonas
-            vitri_keywords = ["OVO-D", "OVODONANTE", "DONANTE", "PRESERVACIÓN DE FERTILIDAD", 
-                              "PRESERVACIÓN FERTILIDAD", "VITRIFICACIÓN OVOCITOS", "VITRI OVOS", 
-                              "VITRIFICACIÓN", "VITRIFICACIÓN OVO"]
-            
-            texto_busqueda = str(row.get('PROC', '')).upper() + " " + diagnostico.upper()
-            
-            # Usar is_receptor() centralizada (incluye OVO-R, DESV OVO, DESVITRI, etc.)
-            # Las receptoras SÍ llevan Placa ICSI, aunque el texto contenga "DONANTE #xxx"
-            is_vitri = any(kw in texto_busqueda for kw in vitri_keywords) and not es_receptor
+            # Usar is_donor_vitri centralizada para detectar Preservación / Criopreservación / Donante / Vitrificación
+            is_vitri = is_donor_vitri(row.get('PROC', ''), diagnostico) and not es_receptor
             
             if is_vitri:
                 val_icsi = ""
-                
-            val_embryoscope = calc_placa_embryoscope(row.get('PROC', ''), diagnostico, max_f, es_receptor)
-            val_cultivo_trad = calc_placa_cultivo_trad(max_f)
-            val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico, is_pabellon=is_pabellon_row)
+                val_embryoscope = ""
+                val_cultivo_trad = ""
+                val_wp_ts = ""
+            else:
+                val_embryoscope = calc_placa_embryoscope(row.get('PROC', ''), diagnostico, max_f, es_receptor)
+                val_cultivo_trad = calc_placa_cultivo_trad(max_f)
+                val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico, is_pabellon=is_pabellon_row)
             
             pdf.cell(widths_d0[0], 6, str(count), 1, 0, 'C')
             pdf.cell(widths_d0[1], 6, paciente[:40], 1)
