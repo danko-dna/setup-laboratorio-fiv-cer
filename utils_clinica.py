@@ -176,3 +176,24 @@ def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str="", is_pabellon=False
         return "4"
     else:
         return str(math.ceil(max_f / 3.5))
+
+def get_numerator_follicles(folic_str):
+    if not folic_str or pd.isna(folic_str):
+        return 0
+    m = re.search(r'^\s*(\d+)', str(folic_str).strip())
+    return int(m.group(1)) if m else 0
+
+def calc_placa_pajuelas(folic_str, is_crio_ovos):
+    """
+    SOP Placa Pajuelas para CRIO OVO / Preservación de Fertilidad:
+    - Numerador N <= 30 -> 1 placa.
+    - 30 < N <= 60 -> 2 placas.
+    - 60 < N <= 90 -> 3 placas.
+    - math.ceil(N / 30.0)
+    """
+    if not is_crio_ovos:
+        return ""
+    num = get_numerator_follicles(folic_str)
+    if num <= 0:
+        return "1"
+    return str(math.ceil(num / 30.0))

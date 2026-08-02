@@ -1,5 +1,5 @@
 from fpdf import FPDF
-from utils_clinica import add_time, get_max_follicles, calculate_plates, is_receptor, is_donor_vitri, calc_placa_g_ivf, calc_placa_icsi, calc_placa_embryoscope, calc_placa_cultivo_trad, calc_wp_ts
+from utils_clinica import add_time, get_max_follicles, calculate_plates, is_receptor, is_donor_vitri, calc_placa_g_ivf, calc_placa_icsi, calc_placa_embryoscope, calc_placa_cultivo_trad, calc_wp_ts, calc_placa_pajuelas
 import io
 import pandas as pd
 import re
@@ -416,7 +416,11 @@ def generar_tabla_optimizada(fecha_str, df_punciones_orig, df_uso_interno_orig, 
                 # Default Logic Colors
                 fill_color = (255, 255, 255)
                 
-                if 'hora desc' in col_name_lower:
+                # Resaltar en rosado intenso si la casilla contiene DUO STIM / DUOSTIM / DUOSTEAM
+                duo_keywords = ['DUO STIM', 'DUOSTIM', 'DUOSTEAM', 'DUO-STIM', 'DUOSTIMULATION', 'DUO STIMULATION']
+                if 'nombre' not in col_name_lower and any(kw in texto.upper() for kw in duo_keywords):
+                    fill_color = (255, 153, 204) # Rosado intenso
+                elif 'hora desc' in col_name_lower:
                     fill_color = (173, 216, 230)
                 elif 'hora' in col_name_lower:
                     if titulo == 'SALA TRANSFER':
@@ -480,11 +484,15 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
     
     # Detectar si hay Biopsia Testicular en las punciones o uso interno
     has_biopsia_testicular = False
-    keywords_bt = ['BIOPSIA TESTICULAR', 'BX TESTICULAR', 'BX TEST', 'BIOPSIA', 'TESTICULAR', 'ASPIRACIÓN DE EPIDÍDIMO', 'ASPIRACION DE EPIDIDIMO']
+    keywords_bt = ['BIOPSIA TESTICULAR', 'BX TESTICULAR', 'BX TEST', 'TESTICULAR', 'ASPIRACIÓN DE EPIDÍDIMO', 'ASPIRACION DE EPIDIDIMO', 'ASPIRACION EPIDIDIMO']
     for check_df in [df_punciones, df_uso_interno]:
         if check_df is not None and not check_df.empty:
             for _, r_check in check_df.iterrows():
                 r_text = " ".join(str(v).upper() for v in r_check.values if v is not None and str(v) != 'nan')
+                # Ignorar si es Biopsia Embrionaria (PGD) y no menciona explícitamente Testicular/Epidídimo
+                if any(emb_kw in r_text for emb_kw in ['BIOPSIA EMB', 'BX EMB', 'BIOPSIA EMBRIONARIA', 'BX EMBRIONARIA']):
+                    if not any(t_kw in r_text for t_kw in ['TESTICULAR', 'EPIDÍDIMO', 'EPIDIDIMO']):
+                        continue
                 if any(kw in r_text for kw in keywords_bt) or re.search(r'\bBT\b', r_text):
                     has_biopsia_testicular = True
                     break
@@ -590,8 +598,8 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         return surname1
 
     # --- TABLA 1: DÍA 0 ---
-    cols_d0 = ['#', 'Paciente', 'Foli (F/DV)', 'Placa G-IVF', 'Placa de ICSI', 'Placa Embryo.', 'Pl. Cultivo Trad.', 'WP', 'TS']
-    widths_d0 = [8, 45, 17, 18, 26, 28, 28, 12, 12] # Sum: 194mm (Portrait A4)
+    cols_d0 = ['#', 'Paciente', 'Foli (F/DV)', 'Placa G-IVF', 'Placa de ICSI', 'Placa Embryo.', 'Pl. Cultivo Trad.', 'WP', 'TS', 'Placa Pajuelas']
+    widths_d0 = [7, 38, 15, 17, 22, 23, 24, 10, 10, 24] # Total sum: 190mm (Portrait A4)
     
     import pandas as pd
     df_dia0 = pd.concat([df_punciones, df_uso_interno], ignore_index=True)
@@ -666,17 +674,21 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             val_icsi = calc_placa_icsi(max_f, semen, is_recept=es_receptor)
             
             # Usar is_donor_vitri centralizada para detectar Preservación / Criopreservación / Donante / Vitrificación
-            is_vitri = is_donor_vitri(row.get('PROC', ''), diagnostico) and not es_receptor
+            crio_keywords = ['CRIO OVO', 'CRIO OVOS', 'CRIOPRESERV', 'PRESERV', 'FREEZE ALL', 'FREEZE-ALL', 'FREEZEALL', 'VITRI']
+            texto_row = str(row.get('PROC', '')).upper() + " " + diagnostico.upper()
+            is_crio_ovos = (is_donor_vitri(row.get('PROC', ''), diagnostico) or any(k in texto_row for k in crio_keywords)) and not es_receptor
             
-            if is_vitri:
+            if is_crio_ovos:
                 val_icsi = ""
                 val_embryoscope = ""
                 val_cultivo_trad = ""
                 val_wp_ts = ""
+                val_placa_pajuelas = calc_placa_pajuelas(folic_str, True)
             else:
                 val_embryoscope = calc_placa_embryoscope(row.get('PROC', ''), diagnostico, max_f, es_receptor)
                 val_cultivo_trad = calc_placa_cultivo_trad(max_f)
                 val_wp_ts = calc_wp_ts(folic_str, es_receptor, proc_str=row.get('PROC', ''), diag_str=diagnostico, is_pabellon=is_pabellon_row)
+                val_placa_pajuelas = ""
             
             pdf.cell(widths_d0[0], 6, str(count), 1, 0, 'C')
             pdf.cell(widths_d0[1], 6, paciente[:40], 1)
@@ -691,6 +703,7 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
             pdf.cell(widths_d0[6], 6, val_cultivo_trad, 1, 0, 'C')
             pdf.cell(widths_d0[7], 6, val_wp_ts, 1, 0, 'C')
             pdf.cell(widths_d0[8], 6, val_wp_ts, 1, 0, 'C')
+            pdf.cell(widths_d0[9], 6, val_placa_pajuelas, 1, 0, 'C')
             pdf.ln(6)
             count += 1
             
