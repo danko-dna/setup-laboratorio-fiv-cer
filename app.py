@@ -76,7 +76,7 @@ else:
 
 # --- INTERFAZ DE USUARIO ---
 st.title("Procesamiento de Tabla Operatoria y Setup Lab")
-st.caption("v2.5 - Actualizado con soporte Placa Pajuelas, DUO STIM rosado y desambiguación PGD/BT")
+st.caption("v2.6 - Protección total contra errores de codificación Unicode (Latin-1 / FPDFUnicodeEncodingException)")
 
 archivo_subido = st.file_uploader("Sube la Tabla Operatoria (DOCX, PDF o DOC)", type=["docx", "pdf", "doc"])
 

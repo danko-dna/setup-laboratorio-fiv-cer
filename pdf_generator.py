@@ -4,36 +4,68 @@ import io
 import pandas as pd
 import re
 
+import unicodedata
+
 class PDF_Robustecido(FPDF):
-    def __init__(self, fecha_doc):
-        super().__init__(orientation='L', unit='mm', format='A4')
+    def __init__(self, fecha_doc=None, orientation='L', unit='mm', format='A4'):
+        super().__init__(orientation=orientation, unit=unit, format=format)
         self.set_margins(8, 8, 8)
         self.fecha_doc = fecha_doc
         self.set_auto_page_break(auto=True, margin=8)
         self.add_page()
 
+    def normalize_text(self, txt):
+        clean = sanitize_text(txt)
+        return super().normalize_text(clean)
+
     def header(self):
-        self.set_font('Helvetica', 'B', 14)
-        # Asegurar que la fecha siempre se renderice limpiando caracteres problemáticos
-        fecha_safe = str(self.fecha_doc)
-        try:
-            fecha_safe.encode('latin-1')
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            fecha_safe = fecha_safe.encode('latin-1', errors='replace').decode('latin-1')
-        self.cell(0, 10, fecha_safe, border=0, ln=1, align='C')
-        self.ln(5)
+        if self.fecha_doc:
+            self.set_font('Helvetica', 'B', 14)
+            fecha_safe = sanitize_text(self.fecha_doc)
+            self.cell(0, 10, fecha_safe, border=0, ln=1, align='C')
+            self.ln(5)
 
 def sanitize_text(text):
-    """Reemplaza caracteres Unicode no soportados por FPDF (latin-1) por sus equivalentes ASCII y normaliza espacios."""
-    if text is None: return ""
+    """Reemplaza caracteres Unicode no soportados por FPDF (latin-1) por sus equivalentes ASCII/latin-1
+    y elimina de forma segura cualquier carácter fuera del rango de codificación latin-1."""
+    if text is None or pd.isna(text): return ""
     text_str = str(text)
+    
+    # 1. Mapa de reemplazos comunes para mantener máxima información inteligible
     replacements = {
-        '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'",
-        '\u201c': '"', '\u201d': '"', '\u2026': '...', '\u02da': '°',
-        '\u200b': '', '\u00a0': ' ', '\u2022': '*', '\xad': '-'
+        '\u2013': '-', '\u2014': '-', '\u2015': '-',
+        '\u2018': "'", '\u2019': "'", '\u201a': "'", '\u201b': "'",
+        '\u201c': '"', '\u201d': '"', '\u201e': '"',
+        '\u2026': '...', '\u02da': '°', '\u200b': '', '\u00a0': ' ',
+        '\u2022': '*', '\u25cf': '*', '\u25cb': '*', '\xad': '-',
+        '≥': '>=', '≤': '<=', '≠': '!=', '±': '+/-',
+        '™': '(TM)', '®': '(R)', '©': '(C)',
+        '✔': 'OK', '✓': 'OK', '✖': 'X', '❌': 'X',
+        'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'μ': 'u',
+        '‘': "'", '’': "'", '“': '"', '”': '"'
     }
     for k, v in replacements.items():
         text_str = text_str.replace(k, v)
+        
+    # 2. Verificación estricta y codificación limpia a latin-1 (ISO-8859-1)
+    try:
+        text_str.encode('latin-1')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        cleaned = []
+        for char in text_str:
+            try:
+                char.encode('latin-1')
+                cleaned.append(char)
+            except UnicodeEncodeError:
+                decomp = unicodedata.normalize('NFD', char)
+                base_char = "".join(c for c in decomp if not unicodedata.combining(c))
+                try:
+                    base_char.encode('latin-1')
+                    cleaned.append(base_char)
+                except UnicodeEncodeError:
+                    pass
+        text_str = "".join(cleaned)
+
     text_str = re.sub(r'[ \t]+', ' ', text_str)
     return text_str
 
@@ -498,9 +530,8 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
                     break
             if has_biopsia_testicular: break
 
-    pdf = FPDF(orientation='P', unit='mm', format='A4')
+    pdf = PDF_Robustecido(fecha_doc=None, orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
     
     # --- ENCABEZADO ---
     import os
