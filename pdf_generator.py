@@ -633,7 +633,15 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
     widths_d0 = [7, 38, 15, 17, 22, 23, 24, 10, 10, 24] # Total sum: 190mm (Portrait A4)
     
     import pandas as pd
-    df_dia0 = pd.concat([df_punciones, df_uso_interno], ignore_index=True)
+    df_punc_clean = df_punciones.copy() if df_punciones is not None and not df_punciones.empty else pd.DataFrame()
+    if not df_punc_clean.empty:
+        df_punc_clean['_es_pabellon_row'] = True
+        
+    df_ui_clean = df_uso_interno.copy() if df_uso_interno is not None and not df_uso_interno.empty else pd.DataFrame()
+    if not df_ui_clean.empty:
+        df_ui_clean['_es_pabellon_row'] = False
+
+    df_dia0 = pd.concat([df_punc_clean, df_ui_clean], ignore_index=True)
     
     # Filtrar pacientes que correspondan a Biopsia Testicular o PRP
     def is_biopsia_or_prp(row):
@@ -659,13 +667,12 @@ def generar_setup_fiv(fecha_str, df_punciones, df_uso_interno, df_transferencias
         
     if not df_dia0.empty:
         draw_table_header('Día 0', cols_d0, widths_d0)
-        n_punciones_count = len(df_punciones) if df_punciones is not None else 0
         surname_counts_d0 = get_surname_counts(df_dia0.get('NOMBRE', []))
         count = 1
         for idx_row, row in df_dia0.iterrows():
             nombre_completo = str(row.get('NOMBRE', '')).strip()
             paciente = get_paciente_name(nombre_completo, surname_counts_d0)
-            is_pabellon_row = (idx_row < n_punciones_count)
+            is_pabellon_row = bool(row.get('_es_pabellon_row', True))
             
             # Buscar dinámicamente columnas de Ovos / Folículos
             folic_str = ""

@@ -76,7 +76,7 @@ else:
 
 # --- INTERFAZ DE USUARIO ---
 st.title("Procesamiento de Tabla Operatoria y Setup Lab")
-st.caption("v2.6 - Protección total contra errores de codificación Unicode (Latin-1 / FPDFUnicodeEncodingException)")
+st.caption("v2.7 - Corrección asignación WP/TS en Desvitrificación de Ovocitos con filas previas de Biopsia Testicular")
 
 archivo_subido = st.file_uploader("Sube la Tabla Operatoria (DOCX, PDF o DOC)", type=["docx", "pdf", "doc"])
 
