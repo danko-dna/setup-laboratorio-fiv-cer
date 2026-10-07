@@ -5,17 +5,17 @@ from datetime import datetime, timedelta
 def get_max_follicles(folic_str):
     """
     Extrae el número máximo de un texto como "10/20", "4/5", etc.
-    Por lo general, el más grande está después del slash, pero se extraen todos los números
-    y se devuelve el mayor. Si no hay números, devuelve 0.
+    Filtra números mayores a 150 para evitar interpretar RUTs o números de ID como folículos.
     """
     if pd.isna(folic_str) or not str(folic_str).strip():
         return 0
     
-    numeros = re.findall(r'\d+', str(folic_str))
+    numeros = re.findall(r'\b\d{1,3}\b', str(folic_str))
     if not numeros:
         return 0
     
-    return max([int(n) for n in numeros])
+    valid_nums = [int(n) for n in numeros if int(n) <= 150]
+    return max(valid_nums) if valid_nums else 0
 
 def calculate_plates(max_follicles):
     """
@@ -180,8 +180,11 @@ def calc_wp_ts(folic_str, is_recept, proc_str="", diag_str="", is_pabellon=False
 def get_numerator_follicles(folic_str):
     if not folic_str or pd.isna(folic_str):
         return 0
-    m = re.search(r'^\s*(\d+)', str(folic_str).strip())
-    return int(m.group(1)) if m else 0
+    m = re.search(r'^\s*(\d{1,3})', str(folic_str).strip())
+    if m:
+        val = int(m.group(1))
+        return val if val <= 150 else 0
+    return 0
 
 def calc_placa_pajuelas(folic_str, is_crio_ovos):
     """
